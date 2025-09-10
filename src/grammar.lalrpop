@@ -1,0 +1,194 @@
+use std::convert::Infallible;
+
+use salsa::Accumulator;
+use smol_str::SmolStr;
+
+use crate::{
+    ir::{Expr, Ident, LitString, Program, Stmt}, op::{BinOp, UnOp}, parser::Diagnostic,
+    token::{Token, LexicalError},
+};
+
+grammar<'db>(db: &'db dyn salsa::Database);
+
+pub Program: Program<'db> = {
+    Stmt* => Program::new(db, <>),
+}
+
+Stmt: Stmt<'db> = {
+    "if"
+    <cond: Expr>
+    <then_branch: Stmt*>
+    <elseif_branches: ElseifBranch*>
+    <else_branch: ElseBranch?>
+    "endif" => {
+        Stmt::If { cond, then_branch, elseif_branches, else_branch }
+    },
+    "set" <ident: "ident"> "=" <expr: Expr> => {
+        Stmt::Set { ident: Ident::new(db, ident), expr }
+    },
+    ! => {
+        Diagnostic(<>.error.into()).accumulate(db);
+        Stmt::Error
+    },
+}
+
+ElseifBranch: (Expr<'db>, Vec<Stmt<'db>>) = {
+    "elseif" <Expr> <Stmt*> => (<>),
+}
+
+ElseBranch: Vec<Stmt<'db>> = {
+    "else" <Stmt*> => <>,
+}
+
+Expr0: Expr<'db> = {
+    <start: @L> <ident: "ident"> <end: @R> => {
+        Expr::Variable { start, ident: Ident::new(db, ident), end }
+    },
+    <start: @L> <number: "number"> <end: @R> => {
+        Expr::LitNumber { start, inner: number.into(), end }
+    },
+    <start: @L> <string: "string"> <end: @R> => {
+        Expr::LitString { start, inner: LitString::new(db, string), end }
+    },
+    <start: @L> "(" <expr: Expr> ")" <end: @R> => {
+        Expr::Paren { start, expr: Box::new(expr), end }
+    },
+}
+
+Expr1: Expr<'db> = {
+    <left: Expr1> <op: "|"> <right: Expr0> => {
+        Expr::Binary { left: Box::new(left), op: BinOp::Filter, right: Box::new(right) }
+    },
+    <func: Expr1> "(" <args: Comma<Expr>> ")" <end: @R> => {
+        Expr::Call { func: Box::new(func), args, end }
+    },
+    Expr0,
+}
+
+Expr2: Expr<'db> = {
+    <start: @L> <op: UnOp> <expr: Expr2> => {
+        Expr::Unary { start, op, expr: Box::new(expr) }
+    },
+    Expr1,
+}
+
+Expr3: Expr<'db> = {
+    <left: Expr3> <op: ProductOp> <right: Expr2> => {
+        Expr::Binary { left: Box::new(left), op, right: Box::new(right) }
+    },
+    Expr2,
+}
+
+Expr4: Expr<'db> = {
+    <left: Expr4> <op: SumOp> <right: Expr3> => {
+        Expr::Binary { left: Box::new(left), op, right: Box::new(right) }
+    },
+    Expr3,
+}
+
+Expr5: Expr<'db> = {
+    <left: Expr5> <op: "~"> <right: Expr4> => {
+        Expr::Binary { left: Box::new(left), op: BinOp::Concat, right: Box::new(right) }
+    },
+    Expr4,
+}
+
+Expr6: Expr<'db> = {
+    <left: Expr5> <op: CompareOp> <right: Expr5> => {
+        Expr::Binary { left: Box::new(left), op, right: Box::new(right) }
+    },
+    Expr5,
+}
+
+Expr7: Expr<'db> = {
+    <left: Expr7> <op: "and"> <right: Expr6> => {
+        Expr::Binary { left: Box::new(left), op: BinOp::And, right: Box::new(right) }
+    },
+    Expr6,
+}
+
+Expr8: Expr<'db> = {
+    <left: Expr8> <op: "or"> <right: Expr7> => {
+        Expr::Binary { left: Box::new(left), op: BinOp::Or, right: Box::new(right) }
+    },
+    Expr7,
+}
+
+Expr: Expr<'db> = {
+    Expr8,
+    <start: @L> <recovery: !> <end: @R> => {
+        Diagnostic(recovery.error.into()).accumulate(db);
+        Expr::Error { span: start..end }
+    },
+}
+
+Comma<T>: Vec<T> = {
+    <mut v: (<T> ",")*> <e: T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    },
+}
+
+UnOp: UnOp = {
+    "-" => UnOp::Neg,
+    "+" => UnOp::Pos,
+}
+
+CompareOp: BinOp = {
+    "==" => BinOp::Eq,
+    ">=" => BinOp::Ge,
+    ">" => BinOp::Gt,
+    "in" => BinOp::In,
+    "<=" => BinOp::Le,
+    "<" => BinOp::Lt,
+    "!=" => BinOp::Ne,
+}
+
+ProductOp: BinOp = {
+    "*" => BinOp::Mul,
+    "/" => BinOp::Div,
+}
+
+SumOp: BinOp = {
+    "+" => BinOp::Add,
+    "-" => BinOp::Sub,
+}
+
+extern {
+    type Location = usize;
+    type Error = Infallible;
+
+    enum Result<Token, LexicalError> {
+        "and" => Ok(Token::And),
+        "|" => Ok(Token::Bar),
+        "," => Ok(Token::Comma),
+        "else" => Ok(Token::Else),
+        "elseif" => Ok(Token::Elseif),
+        "endif" => Ok(Token::Endif),
+        "=" => Ok(Token::Eq),
+        "==" => Ok(Token::EqEq),
+        ">=" => Ok(Token::Ge),
+        ">" => Ok(Token::Gt),
+        "ident" => Ok(Token::Ident(<SmolStr>)),
+        "if" => Ok(Token::If),
+        "in" => Ok(Token::In),
+        "(" => Ok(Token::LParen),
+        "<=" => Ok(Token::Le),
+        "number" => Ok(Token::LitNumber(<f64>)),
+        "string" => Ok(Token::LitString(<String>)),
+        "<" => Ok(Token::Lt),
+        "-" => Ok(Token::Minus),
+        "!=" => Ok(Token::Ne),
+        "or" => Ok(Token::Or),
+        "+" => Ok(Token::Plus),
+        ")" => Ok(Token::RParen),
+        "set" => Ok(Token::Set),
+        "/" => Ok(Token::Slash),
+        "*" => Ok(Token::Star),
+        "~" => Ok(Token::Tilde),
+        "error" => Err(<LexicalError>),
+    }
+}
