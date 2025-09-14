@@ -4,8 +4,8 @@ use salsa::Accumulator;
 use smol_str::SmolStr;
 
 use crate::{
-    ir::{Expr, Ident, LitString, Program, Stmt}, op::{BinOp, UnOp}, parser::Diagnostic,
-    token::{Token, LexicalError},
+    error::Error, expr::{Expr, LitString}, ir::{Diagnostic, Ident, Program}, op::{BinOp, UnOp},
+    stmt::Stmt, token::{Token, LexicalError},
 };
 
 grammar<'db>(db: &'db dyn salsa::Database);
@@ -27,7 +27,7 @@ Stmt: Stmt<'db> = {
         Stmt::Set { ident: Ident::new(db, ident), expr }
     },
     ! => {
-        Diagnostic(<>.error.into()).accumulate(db);
+        Diagnostic(Error::ParsingError(<>.error.into())).accumulate(db);
         Stmt::Error
     },
 }
@@ -117,7 +117,7 @@ Expr8: Expr<'db> = {
 Expr: Expr<'db> = {
     Expr8,
     <start: @L> <recovery: !> <end: @R> => {
-        Diagnostic(recovery.error.into()).accumulate(db);
+        Diagnostic(Error::ParsingError(recovery.error.into())).accumulate(db);
         Expr::Error { span: start..end }
     },
 }

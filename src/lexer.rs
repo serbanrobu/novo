@@ -10,9 +10,13 @@ pub struct Lexer<'source> {
 
 impl<'source> Lexer<'source> {
     pub fn new(source: &'source str) -> Self {
-        let mut token_stream = Token::lexer(source).spanned();
-        text_callback(&mut token_stream);
-        Self { token_stream }
+        Self {
+            token_stream: Token::lexer(source).spanned(),
+        }
+    }
+
+    pub fn skip_text(&mut self) {
+        text_callback(&mut self.token_stream);
     }
 }
 
