@@ -243,7 +243,7 @@ fn lit_string_callback<'source>(lex: &mut Lexer<'source, Token>) -> Result<Strin
         }
     }
 
-    *lex = string_lexer.morph();
+    lex.bump(string_lexer.span().end - lex.span().end);
     Ok(string)
 }
 

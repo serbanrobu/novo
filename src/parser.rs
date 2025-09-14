@@ -11,12 +11,6 @@ use crate::{
     token::{LexicalError, Token},
 };
 
-#[salsa::accumulator]
-#[derive(Clone, Debug, Error, PartialEq, miette::Diagnostic)]
-#[error(transparent)]
-#[diagnostic(transparent)]
-pub struct Diagnostic(#[from] pub ParsingError);
-
 #[derive(Clone, Debug, Error, PartialEq, miette::Diagnostic)]
 pub enum ParsingError {
     #[error("invalid token")]
@@ -117,6 +111,21 @@ pub fn parse_program<'db>(
     source_program: SourceProgram,
 ) -> Program<'db> {
     let source = source_program.text(db);
+    let mut lexer = Lexer::new(source);
+    lexer.skip_text();
+    let parser = ProgramParser::new();
+
+    parser
+        .parse(db, lexer)
+        .expect("should recover from parsing errors")
+}
+
+#[salsa::tracked]
+pub fn parse_program_line<'db>(
+    db: &'db dyn salsa::Database,
+    source_program: SourceProgram,
+) -> Program<'db> {
+    let source = source_program.text(db);
     let lexer = Lexer::new(source);
     let parser = ProgramParser::new();
 
@@ -128,9 +137,7 @@ pub fn parse_program<'db>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        db::DatabaseImpl,
-        ir::{Expr, Stmt},
-        op::BinOp,
+        db::DatabaseImpl, error::Error, expr::Expr, ir::Diagnostic, op::BinOp, stmt::Stmt,
     };
 
     use super::*;
@@ -276,20 +283,20 @@ mod tests {
         assert_eq!(
             diagnostics,
             [
-                Diagnostic(ParsingError::LexicalError(LexicalError::InvalidToken {
-                    span: 6..7
-                })),
-                Diagnostic(ParsingError::UnrecognizedToken {
+                Diagnostic(Error::ParsingError(ParsingError::LexicalError(
+                    LexicalError::InvalidToken { span: 6..7 }
+                ))),
+                Diagnostic(Error::ParsingError(ParsingError::UnrecognizedToken {
                     expected: vec!["\"=\"".to_owned()],
                     span: 14..16,
                     token: Token::EqEq,
-                }),
-                Diagnostic(ParsingError::UnrecognizedEof {
+                })),
+                Diagnostic(Error::ParsingError(ParsingError::UnrecognizedEof {
                     expected: ["\"else\"", "\"elseif\"", "\"endif\"", "\"if\"", "\"set\""]
                         .map(ToOwned::to_owned)
                         .to_vec(),
                     offset: 28
-                })
+                }))
             ]
         );
     }
