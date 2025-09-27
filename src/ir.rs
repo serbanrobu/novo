@@ -1,4 +1,4 @@
-use crate::{stmt::Stmt, r#type::Type};
+use crate::{stmt::Stmt, r#type::Type, value::Value};
 use std::sync::Arc;
 
 use im::HashMap;
@@ -36,12 +36,15 @@ pub struct Diagnostic(#[from] pub Error);
 #[derive(Clone)]
 pub struct Output {
     pub ident: SmolStr,
-    pub r#type: Type,
+    pub value: Value,
 }
 
 pub type Scope = HashMap<SmolStr, Type>;
 
+pub type Environment = HashMap<SmolStr, Value>;
+
 #[salsa::input(debug)]
 pub struct Context {
-    pub scope: Scope,
+    #[returns(ref)]
+    pub environment: Environment,
 }

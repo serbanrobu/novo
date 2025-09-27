@@ -1,6 +1,6 @@
-use im::{HashMap, hashmap};
+use im::HashMap;
 use novo::{
-    compile::{compile, compile_line},
+    compile::{interpret_source_program, interpret_source_program_line},
     ir::{Context, Diagnostic, Output},
 };
 use std::{
@@ -45,11 +45,14 @@ fn eval(code: String) -> Result<()> {
     let db = &DatabaseImpl::new();
     let source = Arc::new(code);
     let source_program = SourceProgram::new(db, source.clone());
-    let context = Context::new(db, hashmap! {});
-    compile(db, source_program, context);
-    let diagnostics = compile::accumulated::<Diagnostic>(db, source_program, context);
+    let context = Context::new(db, HashMap::new());
+    interpret_source_program(db, source_program, context);
+
+    let diagnostics =
+        interpret_source_program::accumulated::<Diagnostic>(db, source_program, context);
+
     print_diagnostics(diagnostics, &source)?;
-    let outputs = compile::accumulated::<Output>(db, source_program, context);
+    let outputs = interpret_source_program::accumulated::<Output>(db, source_program, context);
     print_outputs(&outputs)?;
     Ok(())
 }
@@ -108,19 +111,21 @@ fn handle_line(
 ) -> Result<()> {
     let source = Arc::new(line);
     source_program.set_text(db).to(source.clone());
-    compile_line(db, source_program, context);
-    let diagnostics = compile_line::accumulated::<Diagnostic>(db, source_program, context);
+    interpret_source_program_line(db, source_program, context);
+    let diagnostics =
+        interpret_source_program_line::accumulated::<Diagnostic>(db, source_program, context);
     print_diagnostics(diagnostics, &source)?;
-    let outputs = compile_line::accumulated::<Output>(db, source_program, context);
+    let outputs = interpret_source_program_line::accumulated::<Output>(db, source_program, context);
     print_outputs(&outputs)?;
 
-    let scope = outputs
-        .into_iter()
-        .cloned()
-        .map(|o| (o.ident, o.r#type))
+    let scope = context
+        .environment(db)
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .chain(outputs.into_iter().cloned().map(|o| (o.ident, o.value)))
         .collect();
 
-    context.set_scope(db).to(scope);
+    context.set_environment(db).to(scope);
     Ok(())
 }
 
@@ -142,15 +147,15 @@ fn print_diagnostics<'db>(
     Ok(())
 }
 
-fn print_outputs(outputs: &Vec<&Output>) -> Result<()> {
+fn print_outputs(outputs: &[&Output]) -> Result<()> {
     let mut handle = io::stdout().lock();
 
-    for (x, t) in outputs
+    for (x, v) in outputs
         .iter()
-        .map(|o| (&o.ident, &o.r#type))
+        .map(|o| (&o.ident, &o.value))
         .collect::<std::collections::HashMap<_, _>>()
     {
-        writeln!(&mut handle, "{x} : {t:?}").into_diagnostic()?;
+        writeln!(&mut handle, "{x} = {v}").into_diagnostic()?;
     }
 
     Ok(())

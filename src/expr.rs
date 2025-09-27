@@ -1,5 +1,6 @@
 use logos::Span;
 use ordered_float::OrderedFloat;
+use smol_str::SmolStr;
 
 use crate::{
     ir::Ident,
@@ -11,7 +12,7 @@ pub type Number = OrderedFloat<f64>;
 #[salsa::interned(debug)]
 pub struct LitString<'db> {
     #[returns(ref)]
-    pub text: String,
+    pub text: SmolStr,
 }
 
 #[derive(Eq, PartialEq, Debug, Hash, salsa::Update)]
@@ -28,6 +29,11 @@ pub enum Expr<'db> {
     },
     Error {
         span: Span,
+    },
+    LitBoolean {
+        start: usize,
+        inner: bool,
+        end: usize,
     },
     LitNumber {
         start: usize,
@@ -62,6 +68,7 @@ impl<'db> Expr<'db> {
             Self::Binary { left, .. } => left.start(),
             Self::Call { func, .. } => func.start(),
             Self::Error { span } => span.start,
+            Self::LitBoolean { start, .. } => *start,
             Self::LitNumber { start, .. } => *start,
             Self::LitString { start, .. } => *start,
             Self::Paren { start, .. } => *start,
@@ -75,6 +82,7 @@ impl<'db> Expr<'db> {
             Self::Binary { right, .. } => right.end(),
             Self::Call { end, .. } => *end,
             Self::Error { span } => span.end,
+            Self::LitBoolean { end, .. } => *end,
             Self::LitNumber { end, .. } => *end,
             Self::LitString { end, .. } => *end,
             Self::Paren { end, .. } => *end,
