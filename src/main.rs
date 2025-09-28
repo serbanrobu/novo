@@ -1,4 +1,5 @@
 use im::HashMap;
+use indexmap::IndexMap;
 use novo::{
     compile::{interpret_source_program, interpret_source_program_line},
     ir::{Context, Diagnostic, Output},
@@ -153,7 +154,7 @@ fn print_outputs(outputs: &[&Output]) -> Result<()> {
     for (x, v) in outputs
         .iter()
         .map(|o| (&o.ident, &o.value))
-        .collect::<std::collections::HashMap<_, _>>()
+        .collect::<IndexMap<_, _>>()
     {
         writeln!(&mut handle, "{x} = {v}").into_diagnostic()?;
     }
