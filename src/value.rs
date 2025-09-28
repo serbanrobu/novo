@@ -142,8 +142,6 @@ impl From<String> for Value {
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Self::Default, Self::Default) => Some(Ordering::Equal),
-            (Self::Default1(v), Self::Default1(w)) if v == w => Some(Ordering::Equal),
             (Self::Boolean(b), v) => Some(b.cmp(&v.as_bool())),
             (Self::Null, v) => {
                 if v.as_bool() {
@@ -156,15 +154,11 @@ impl PartialOrd for Value {
                 let o = v.as_number()?;
                 n.partial_cmp(&o)
             }
-            (Self::RoundDown, Self::RoundDown) => Some(Ordering::Equal),
-            (Self::RoundDown1(n), Self::RoundDown1(o)) if n == o => Some(Ordering::Equal),
-            (Self::RoundUp, Self::RoundUp) => Some(Ordering::Equal),
-            (Self::RoundUp1(n), Self::RoundUp1(o)) if n == o => Some(Ordering::Equal),
-            (Self::Spaceless, Self::Spaceless) => Some(Ordering::Equal),
             (Self::String(s), v) => {
                 let t = v.as_string()?;
                 s.as_str().partial_cmp(&t)
             }
+            (v, w) if v == w => Some(Ordering::Equal),
             _ => None,
         }
     }
