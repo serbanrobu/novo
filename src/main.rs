@@ -1,6 +1,6 @@
 use im::HashMap;
 use novo::{
-    compile::{interpret_source_program, interpret_source_program_line},
+    compile::{interpret_source_program, interpret_source_program_line, type_check_source_program},
     ir::{Context, Diagnostic, Output},
 };
 use std::{
@@ -20,6 +20,8 @@ use salsa::Setter;
 #[derive(Debug, Parser)]
 #[command(about, styles = CLAP_STYLING, version)]
 enum Cli {
+    /// Type check a Novo program
+    Check { file: PathBuf },
     /// Evaluate a script from the command line
     Eval { code: String },
     /// Start an interactive Read-Eval-Print Loop (REPL) for Novo
@@ -32,6 +34,10 @@ fn main() -> Result<()> {
     miette::set_panic_hook();
 
     match Cli::parse() {
+        Cli::Check { file } => {
+            let code = fs::read_to_string(file).into_diagnostic()?;
+            check(code)
+        }
         Cli::Eval { code } => eval(code),
         Cli::Repl => repl(),
         Cli::Run { file } => {
@@ -39,6 +45,20 @@ fn main() -> Result<()> {
             eval(code)
         }
     }
+}
+
+fn check(code: String) -> Result<()> {
+    let db = &DatabaseImpl::new();
+    let source = Arc::new(code);
+    let source_program = SourceProgram::new(db, source.clone());
+    let context = Context::new(db, HashMap::new());
+    type_check_source_program(db, source_program, context);
+
+    let diagnostics =
+        type_check_source_program::accumulated::<Diagnostic>(db, source_program, context);
+
+    print_diagnostics(diagnostics, &source)?;
+    Ok(())
 }
 
 fn eval(code: String) -> Result<()> {
