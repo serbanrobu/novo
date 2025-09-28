@@ -126,10 +126,13 @@ pub enum Token {
     LParen,
     #[token("<=")]
     Le,
+    #[token("true", |_| true)]
+    #[token("false", |_| false)]
+    LitBoolean(bool),
     #[regex(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?", lit_number_callback)]
     LitNumber(f64),
     #[token("'", lit_string_callback)]
-    LitString(String),
+    LitString(SmolStr),
     #[token("<")]
     Lt,
     #[token("-")]
@@ -170,6 +173,7 @@ impl fmt::Display for Token {
             Self::In => f.write_str("in"),
             Self::LParen => f.write_char('('),
             Self::Le => f.write_str("<="),
+            Self::LitBoolean(b) => b.fmt(f),
             Self::LitNumber(n) => n.fmt(f),
             Self::LitString(s) => write!(f, "{:?}", s),
             Self::Lt => f.write_char('<'),
@@ -225,7 +229,7 @@ fn lit_number_callback<'source>(lex: &mut Lexer<'source, Token>) -> Result<f64, 
     lex.slice().parse()
 }
 
-fn lit_string_callback<'source>(lex: &mut Lexer<'source, Token>) -> Result<String, LexicalError> {
+fn lit_string_callback<'source>(lex: &mut Lexer<'source, Token>) -> Result<SmolStr, LexicalError> {
     let mut string_lexer = lex.clone().morph::<StringToken<'source>>();
     let mut string = String::new();
 
@@ -244,7 +248,7 @@ fn lit_string_callback<'source>(lex: &mut Lexer<'source, Token>) -> Result<Strin
     }
 
     lex.bump(string_lexer.span().end - lex.span().end);
-    Ok(string)
+    Ok(string.into())
 }
 
 pub fn text_callback<'source>(lex: &mut Lexer<'source, Token>) {

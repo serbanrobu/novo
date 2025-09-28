@@ -44,6 +44,9 @@ Expr0: Expr<'db> = {
     <start: @L> <ident: "ident"> <end: @R> => {
         Expr::Variable { start, ident: Ident::new(db, ident), end }
     },
+    <start: @L> <boolean: "boolean"> <end: @R> => {
+        Expr::LitBoolean { start, inner: boolean, end }
+    },
     <start: @L> <number: "number"> <end: @R> => {
         Expr::LitNumber { start, inner: number.into(), end }
     },
@@ -177,8 +180,9 @@ extern {
         "in" => Ok(Token::In),
         "(" => Ok(Token::LParen),
         "<=" => Ok(Token::Le),
+        "boolean" => Ok(Token::LitBoolean(<bool>)),
         "number" => Ok(Token::LitNumber(<f64>)),
-        "string" => Ok(Token::LitString(<String>)),
+        "string" => Ok(Token::LitString(<SmolStr>)),
         "<" => Ok(Token::Lt),
         "-" => Ok(Token::Minus),
         "!=" => Ok(Token::Ne),
