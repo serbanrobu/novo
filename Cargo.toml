@@ -23,4 +23,5 @@ thiserror = "2.0.16"
 lalrpop = "0.22.2"
 
 [features]
+type-check = []
 with-file-history = []

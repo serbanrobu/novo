@@ -12,6 +12,7 @@ pub fn interpret_source_program<'db>(
     context: Context,
 ) {
     let program = parse_program(db, source_program);
+    #[cfg(feature = "type-check")]
     type_check_program(db, program, context);
     interpret_program(db, program, context);
 }
@@ -23,6 +24,17 @@ pub fn interpret_source_program_line<'db>(
     context: Context,
 ) {
     let program = parse_program_line(db, source_program);
+    #[cfg(feature = "type-check")]
     type_check_program(db, program, context);
     interpret_program(db, program, context);
+}
+
+#[salsa::tracked]
+pub fn type_check_source_program<'db>(
+    db: &'db dyn salsa::Database,
+    source_program: SourceProgram,
+    context: Context,
+) {
+    let program = parse_program(db, source_program);
+    type_check_program(db, program, context);
 }
