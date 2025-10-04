@@ -9,6 +9,7 @@ pub mod ir;
 pub mod lexer;
 pub mod op;
 pub mod parser;
+pub mod server;
 pub mod stmt;
 pub mod token;
 pub mod r#type;

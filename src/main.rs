@@ -1,15 +1,18 @@
 use im::HashMap;
 use indexmap::IndexMap;
 use novo::{
-    compile::{interpret_source_program, interpret_source_program_line, type_check_source_program},
+    compile::{compile, compile_and_interpret, compile_and_interpret_line},
     ir::{Context, Diagnostic, Output},
+    server::serve,
 };
 use std::{
     fs,
     io::{self, Write},
+    net::IpAddr,
     path::PathBuf,
     sync::Arc,
 };
+use tokio::runtime::Runtime;
 
 use clap::Parser;
 use clap_cargo::style::CLAP_STYLING;
@@ -29,6 +32,15 @@ enum Cli {
     Repl,
     /// Run a Novo program
     Run { file: PathBuf },
+    /// Run a server
+    Serve {
+        /// The TCP address to serve on
+        #[arg(long, default_value_t = [0, 0, 0, 0].into())]
+        host: IpAddr,
+        /// The TCP port to serve on. Pass 0 to pick a random free port
+        #[arg(long, default_value_t = 8000)]
+        port: u16,
+    },
 }
 
 fn main() -> Result<()> {
@@ -45,6 +57,10 @@ fn main() -> Result<()> {
             let code = fs::read_to_string(file).into_diagnostic()?;
             eval(code)
         }
+        Cli::Serve { host, port } => Runtime::new()
+            .into_diagnostic()?
+            .block_on(serve(host, port))
+            .into_diagnostic(),
     }
 }
 
@@ -53,11 +69,8 @@ fn check(code: String) -> Result<()> {
     let source = Arc::new(code);
     let source_program = SourceProgram::new(db, source.clone());
     let context = Context::new(db, HashMap::new());
-    type_check_source_program(db, source_program, context);
-
-    let diagnostics =
-        type_check_source_program::accumulated::<Diagnostic>(db, source_program, context);
-
+    compile(db, source_program, context);
+    let diagnostics = compile::accumulated::<Diagnostic>(db, source_program, context);
     print_diagnostics(diagnostics, &source)?;
     Ok(())
 }
@@ -67,14 +80,12 @@ fn eval(code: String) -> Result<()> {
     let source = Arc::new(code);
     let source_program = SourceProgram::new(db, source.clone());
     let context = Context::new(db, HashMap::new());
-    interpret_source_program(db, source_program, context);
 
-    let diagnostics =
-        interpret_source_program::accumulated::<Diagnostic>(db, source_program, context);
+    match compile_and_interpret(db, source_program, context) {
+        Ok(outputs) => print_outputs(&outputs)?,
+        Err(diagnostics) => print_diagnostics(diagnostics, &source)?,
+    }
 
-    print_diagnostics(diagnostics, &source)?;
-    let outputs = interpret_source_program::accumulated::<Output>(db, source_program, context);
-    print_outputs(&outputs)?;
     Ok(())
 }
 
@@ -132,21 +143,23 @@ fn handle_line(
 ) -> Result<()> {
     let source = Arc::new(line);
     source_program.set_text(db).to(source.clone());
-    interpret_source_program_line(db, source_program, context);
-    let diagnostics =
-        interpret_source_program_line::accumulated::<Diagnostic>(db, source_program, context);
-    print_diagnostics(diagnostics, &source)?;
-    let outputs = interpret_source_program_line::accumulated::<Output>(db, source_program, context);
-    print_outputs(&outputs)?;
 
-    let scope = context
-        .environment(db)
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .chain(outputs.into_iter().cloned().map(|o| (o.ident, o.value)))
-        .collect();
+    match compile_and_interpret_line(db, source_program, context) {
+        Ok(outputs) => {
+            print_outputs(&outputs)?;
 
-    context.set_environment(db).to(scope);
+            let scope = context
+                .environment(db)
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .chain(outputs.into_iter().cloned().map(|o| (o.ident, o.value)))
+                .collect();
+
+            context.set_environment(db).to(scope);
+        }
+        Err(diagnostics) => print_diagnostics(diagnostics, &source)?,
+    }
+
     Ok(())
 }
 

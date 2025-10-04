@@ -33,7 +33,7 @@ pub struct SourceProgram {
 pub struct Diagnostic(#[from] pub Error);
 
 #[salsa::accumulator]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Output {
     pub ident: SmolStr,
     pub value: Value,

@@ -1,21 +1,30 @@
 use std::{borrow::Cow, cmp::Ordering, fmt, sync::Arc};
 
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
 use crate::expr::Number;
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, salsa::Update)]
+#[derive(Clone, Debug, Deserialize, Hash, PartialEq, Eq, Serialize, salsa::Update)]
+#[serde(untagged)]
 pub enum Value {
+    #[serde(skip)]
     Default,
+    #[serde(skip)]
     Default1(Arc<Self>),
     Boolean(bool),
     Null,
     Number(Number),
+    #[serde(skip)]
     RoundDown,
+    #[serde(skip)]
     RoundDown1(Number),
+    #[serde(skip)]
     RoundUp,
+    #[serde(skip)]
     RoundUp1(Number),
+    #[serde(skip)]
     Spaceless,
     String(SmolStr),
 }
@@ -61,7 +70,7 @@ impl Value {
             Self::Default => true,
             Self::Default1(_) => true,
             Self::Boolean(b) => *b,
-            Self::Null => true,
+            Self::Null => false,
             Self::Number(n) => *n != 0.0,
             Self::RoundDown => true,
             Self::RoundDown1(_) => true,
@@ -156,7 +165,7 @@ impl PartialOrd for Value {
             }
             (Self::String(s), v) => {
                 let t = v.as_string()?;
-                s.as_str().partial_cmp(&t)
+                s.as_str().partial_cmp(t.as_ref())
             }
             (v, w) if v == w => Some(Ordering::Equal),
             _ => None,

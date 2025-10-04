@@ -91,7 +91,7 @@ impl<'a> fmt::Display for ExpectedOneOf<'a> {
             return Ok(());
         };
 
-        write!(f, "Expected one of {}", first)?;
+        write!(f, "expected one of {}", first)?;
 
         let Some((last, rest)) = rest.split_last() else {
             return Ok(());
