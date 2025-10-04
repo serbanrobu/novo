@@ -120,7 +120,7 @@ impl<'db> Expr<'db> {
 
                     match v {
                         Value::Boolean(b) => {
-                            let c = w.into();
+                            let c: bool = w.into();
                             Ok(Value::Boolean(b == c))
                         }
                         Value::Null => {
